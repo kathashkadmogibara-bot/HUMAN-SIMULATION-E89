@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human DNA Simulation</title>
+<style>
+  :root { --bg:#070b16; --card:#0f1626; --line:#223050; --txt:#e6edf7; --mut:#8fa0bf; --A:#ff5d6c; --T:#ffd24d; --G:#4dd6a0; --C:#5aa8ff; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--txt); font-family:system-ui,Segoe UI,Roboto,sans-serif; min-height:100vh; display:flex; flex-direction:column; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  header h1 { font-size:18px; }
+  header small { color:var(--mut); }
+  main { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:12px; }
+  @media (max-width:800px){ main{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0; }
+  canvas { width:100%; height:420px; background:#050810; border-radius:10px; display:block; }
+  .legend { display:flex; gap:12px; font-size:13px; flex-wrap:wrap; }
+  .legend b { padding:1px 7px; border-radius:6px; color:#000; }
+  .info { font-size:12px; color:var(--mut); font-family:ui-monospace,monospace; word-break:break-all; max-height:60px; overflow:auto; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  button { background:#1b2a4a; color:var(--txt); border:1px solid var(--line); padding:9px 14px; border-radius:10px; cursor:pointer; font-size:14px; }
+  button:hover { background:#25396a; }
+  button.on { background:#c0392b; }
+  input[type=text] { flex:1; min-width:140px; background:#0a1020; color:var(--txt); border:1px solid var(--line); border-radius:10px; padding:9px 12px; font-size:14px; }
+  input[type=range]{ flex:1; }
+  #human { display:flex; gap:12px; align-items:flex-start; }
+  #avatar { width:84px; height:84px; flex:none; border-radius:50%; background:#12203d; border:2px solid var(--line); display:grid; place-items:center; font-size:46px; transition:.2s; }
+  #avatar.talk { border-color:var(--G); box-shadow:0 0 18px var(--G); animation:pulse .5s infinite alternate; }
+  @keyframes pulse { to { transform:scale(1.07); } }
+  #chat { flex:1; background:#0a1020; border:1px solid var(--line); border-radius:10px; padding:10px; height:230px; overflow-y:auto; font-size:14px; line-height:1.45; }
+  .me { color:#9ec5ff; margin-top:6px; }
+  .bot { color:#c8f5de; margin-top:6px; }
+  #cam { width:100%; max-height:150px; border-radius:10px; background:#000; display:none; object-fit:cover; }
+  .meter { height:8px; background:#0a1020; border-radius:6px; overflow:hidden; }
+  .meter i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--G),var(--T),var(--A)); }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chips span { font-size:12px; background:#14213c; border:1px solid var(--line); padding:4px 9px; border-radius:20px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧬 Human DNA Simulation</h1>
+  <small>Gene: HBB (Hemoglobin beta) • Chromosome 11</small>
+</header>
+
+<main>
+  <!-- LEFT: DNA -->
+  <section class="card">
+    <canvas id="dna" width="700" height="840"></canvas>
+    <div class="legend">
+      <span><b style="background:var(--A)">A</b> Adenine</span>
+      <span><b style="background:var(--T)">T</b> Thymine</span>
+      <span><b style="background:var(--G)">G</b> Guanine</span>
+      <span><b style="background:var(--C)">C</b> Cytosine</span>
+    </div>
+    <div class="row"><label style="font-size:13px">Speed</label><input type="range" id="speed" min="0" max="10" value="3"></div>
+    <div class="info" id="seqinfo"></div>
+  </section>
+
+  <!-- RIGHT: Human -->
+  <section class="card">
+    <div id="human">
+      <div id="avatar">🧑‍🔬</div>
+      <div id="chat"></div>
+    </div>
+
+    <div class="row">
+      <button id="micBtn">🎤 Mic</button>
+      <button id="camBtn">📷 Camera</button>
+      <button id="voiceBtn">🔊 Voice: ON</button>
+    </div>
+    <div class="meter"><i id="level"></i></div>
+    <video id="cam" autoplay playsinline muted></video>
+
+    <div class="row">
+      <input type="text" id="q" placeholder="Human se kuch bhi pucho... (e.g. DNA kya hai?)">
+      <button id="ask">Ask</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </section>
+</main>
+
+<script>
+/* ================== REAL DNA ==================
+   Human HBB (hemoglobin beta) gene — coding sequence (444 bp, 147 amino acids).
+   Source: NCBI RefSeq NM_000518. Verify at https://www.ncbi.nlm.nih.gov/nuccore/NM_000518
+   Note: the full human genome is ~3.2 billion bases (~3 GB) — too big for one HTML file,
+   so this uses one real gene. You can paste any other real sequence below. */
+const SEQ = (
+"ATGGTGCATCTGACTCCTGAGGAGAAGTCTGCCGTTACTGCCCTGTGGGGCAAGGTGAACGTGGATGAAGTTGGTGGTGAGGCCCTGGGCAGGCTGCTGGTGGTCTACCCTTGGACCCAGAGGTTCTTTGAGTCCTTTGGGGATCTGTCCACTCCTGATGCTGTTATGGGCAACCCTAAGGTGAAGGCTCATGGCAAGAAAGTGCTCGGTGCCTTTAGTGATGGCCTGGCTCACCTGGACAACCTCAAGGGCACCTTTGCCACACTGAGTGAGCTGCACTGTGACAAGCTGCACGTGGATCCTGAGAACTTCAGGCTCCTGGGCAACGTGCTGGTCTGCGTGCTGGCCCATCACTTTGGCAAAGAATTCACCCCACCAGTGCAGGCTGCCTATCAGAAAGTGGTGGCTGGTGTGGCTAATGCCCTGGCCCACAAGTATCACTAA"
+).replace(/[^ACGT]/g,"");
+const COMP = {A:"T",T:"A",G:"C",C:"G"};
+const COL  = {A:"#ff5d6c",T:"#ffd24d",G:"#4dd6a0",C:"#5aa8ff"};
+const gc = (SEQ.match(/[GC]/g)||[]).length/SEQ.length*100;
+document.getElementById("seqinfo").textContent =
+  `Length: ${SEQ.length} bp | GC content: ${gc.toFixed(1)}% | 5'-${SEQ.slice(0,60)}...-3'`;
+
+/* ================== DNA CANVAS ================== */
+const cv = document.getElementById("dna"), ctx = cv.getContext("2d");
+let t = 0, offset = 0;
+function fit(){ const r = cv.getBoundingClientRect(); cv.width = r.width*devicePixelRatio; cv.height = r.height*devicePixelRatio; }
+addEventListener("resize", fit); fit();
+
+function draw(){
+  const W = cv.width, H = cv.height, d = devicePixelRatio;
+  ctx.clearRect(0,0,W,H);
+  const sp = 34*d, R = Math.min(W*0.28, 120*d), cx = W/2;
+  const n = Math.ceil(H/sp)+2;
+  const speed = +document.getElementById("speed").value;
+  t += 0.012*speed; offset += 0.02*speed;
+  const base = Math.floor(offset), frac = offset-base;
+  const pts = [];
+  for(let i=0;i<n;i++){
+    const idx = (base+i)%SEQ.length;
+    const y = (i-frac)*sp;
+    const a = (base+i)*0.55 + t;
+    pts.push({y, s:Math.sin(a), c:Math.cos(a), b:SEQ[idx]});
+  }
+  // backbones
+  for(const side of [1,-1]){
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const x = cx + side*R*p.c; i? ctx.lineTo(x,p.y) : ctx.moveTo(x,p.y); });
+    ctx.strokeStyle = side>0 ? "rgba(120,160,255,.55)" : "rgba(255,150,200,.55)";
+    ctx.lineWidth = 4*d; ctx.stroke();
+  }
+  // rungs (back first, then front)
+  const order = pts.slice().sort((a,b)=>a.s-b.s);
+  for(const p of order){
+    const x1 = cx + R*p.c, x2 = cx - R*p.c;
+    const sc = 0.7 + 0.3*p.s, al = 0.5 + 0.5*(p.s+1)/2;
+    const b1 = p.b, b2 = COMP[p.b];
+    const mid = cx;
+    ctx.globalAlpha = al;
+    ctx.lineWidth = 5*d*sc;
+    ctx.strokeStyle = COL[b1]; ctx.beginPath(); ctx.moveTo(x1,p.y); ctx.lineTo(mid,p.y); ctx.stroke();
+    ctx.strokeStyle = COL[b2]; ctx.beginPath(); ctx.moveTo(mid,p.y); ctx.lineTo(x2,p.y); ctx.stroke();
+    for(const [x,b] of [[x1,b1],[x2,b2]]){
+      ctx.fillStyle = COL[b]; ctx.beginPath(); ctx.arc(x,p.y,11*d*sc,0,7); ctx.fill();
+      ctx.fillStyle = "#000"; ctx.font = `bold ${12*d*sc}px sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(b,x,p.y+1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+
+/* ================== HUMAN: GK KNOWLEDGE ================== */
+const KB = [
+ {k:["dna kya","what is dna","dna"], a:"DNA (Deoxyribonucleic Acid) ek molecule hai jo jeevit cheezon ka genetic instruction code rakhta hai. Isme 4 bases hote hain: A, T, G, C. Structure double helix hai, jo 1953 mein Watson aur Crick ne bataya (Rosalind Franklin ke X-ray data ki madad se)."},
+ {k:["base pair","kitne base","genome size","3 billion","3.2"], a:"Human genome mein lagbhag 3.2 billion base pairs hote hain, 23 chromosome pairs mein failey hue."},
+ {k:["chromosome","kromosom"], a:"Insaan mein 46 chromosomes (23 pairs) hote hain. 22 pairs autosomes aur 1 pair sex chromosomes (XX ladki, XY ladka)."},
+ {k:["gene","jeen"], a:"Gene DNA ka ek hissa hai jo ek protein ya RNA banane ka instruction deta hai. Human mein lagbhag 20,000 protein-coding genes hain."},
+ {k:["hbb","hemoglobin","haemoglobin","beta globin"], a:"Screen par jo sequence chal rahi hai wo HBB gene ka hai. Ye hemoglobin ka beta hissa banata hai, jo khoon mein oxygen le jaata hai. Is gene mein ek base badalne se sickle cell anemia ho sakta hai."},
+ {k:["sickle"], a:"Sickle cell anemia HBB gene mein ek point mutation (GAG → GTG) se hota hai, jisse glutamic acid ki jagah valine aa jaata hai."},
+ {k:["rna"], a:"RNA single-strand hota hai, isme Thymine ki jagah Uracil (U) hota hai. DNA se mRNA banta hai (transcription), phir protein banta hai (translation)."},
+ {k:["protein"], a:"Protein amino acids ki chain hai. Har 3 bases (codon) ek amino acid decide karte hain. Total 20 amino acids hote hain."},
+ {k:["codon","start codon","atg"], a:"ATG start codon hai (Methionine). Stop codons TAA, TAG, TGA hain. Dekho, is sequence ka aakhri codon TAA hai!"},
+ {k:["blood group","khoon"], a:"Blood groups A, B, AB, O hote hain (ABO gene, chromosome 9). Rh factor alag gene se aata hai. O negative universal donor hai."},
+ {k:["heart","dil"], a:"Insaani dil ek minute mein ~72 baar dhadakta hai aur din mein ~1 lakh baar. Ye 4 chambers ka muscle hai."},
+ {k:["brain","dimag"], a:"Insaani dimag mein lagbhag 86 billion neurons hote hain. Ye body ke weight ka sirf ~2% hai par ~20% energy use karta hai."},
+ {k:["bones","haddi"], a:"Adult insaan mein 206 haddiyan hoti hain. Bachhe ke paida hone par ~270 hoti hain, jo baad mein jud jaati hain."},
+ {k:["largest organ","sabse bada ang"], a:"Skin (tvacha) body ka sabse bada organ hai. Andar ka sabse bada organ liver hai."},
+ {k:["cell","cells","koshika"], a:"Insaani body mein lagbhag 30-37 trillion cells hain. Har cell (red blood cells ko chhodkar) mein nucleus aur DNA hota hai."},
+ {k:["twin","jude"], a:"Identical twins ka DNA lagbhag same hota hai. Fingerprints phir bhi alag hote hain."},
+ {k:["human genome project","hgp"], a:"Human Genome Project 1990 mein shuru hua aur 2003 mein pura hua. 2022 mein T2T consortium ne pehli complete, gap-free human genome sequence publish ki."},
+ {k:["watson","crick","franklin"], a:"Double helix model James Watson aur Francis Crick ne 1953 mein diya. Rosalind Franklin ki Photo 51 X-ray image isme bahut important thi."},
+ {k:["mutation"], a:"Mutation DNA sequence mein badlaav hai. Kuch harmless hote hain, kuch bimari karte hain, aur kuch evolution ka kaaran bante hain."},
+ {k:["crispr"], a:"CRISPR-Cas9 ek gene editing tool hai jo DNA ko kisi khaas jagah par kaat sakta hai. Iske liye 2020 ka Chemistry Nobel Prize Doudna aur Charpentier ko mila."},
+ {k:["human ki","insan ka dna","chimp","banana","similar"], a:"Insaan ka DNA chimpanzee se ~98-99% milta hai, aur kisi bhi do insaanon ka DNA ~99.9% same hota hai."},
+ {k:["india","bharat","capital"], a:"India ki capital New Delhi hai. India duniya ka sabse bada population wala desh hai (~1.4 billion)."},
+ {k:["hello","hi","hey","namaste"], a:"Namaste! Main DNA aur human body ke baare mein bata sakta hoon. Kuch pucho, jaise 'DNA kya hai?' ya 'chromosome kitne hote hain?'"}
+];
+
+const chat = document.getElementById("chat"), avatar = document.getElementById("avatar");
+let voiceOn = true;
+function say(who, txt){
+  const d = document.createElement("div"); d.className = who; d.textContent = (who==="me"?"You: ":"Human: ") + txt;
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+}
+function speak(txt){
+  if(!voiceOn || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(txt); u.lang = "en-IN"; u.rate = 1;
+  u.onstart = ()=>avatar.classList.add("talk"); u.onend = ()=>avatar.classList.remove("talk");
+  speechSynthesis.speak(u);
+}
+function reply(txt){ say("bot", txt); speak(txt); }
+
+async function answer(q){
+  const s = q.toLowerCase();
+  let best = null, score = 0;
+  for(const e of KB){
+    let sc = 0; for(const k of e.k) if(s.includes(k)) sc += k.length;
+    if(sc > score){ score = sc; best = e; }
+  }
+  if(best) return reply(best.a);
+  // Fallback: Wikipedia (needs internet)
+  try{
+    const term = s.replace(/[?!.]/g,"").replace(/\b(what|is|are|who|kya|hai|ka|ki|ke|batao|bata|tell|me|about|the)\b/g,"").trim();
+    const r = await fetch("https://en.wikipedia.org/w/api.php?origin=*&action=opensearch&limit=1&format=json&search="+encodeURIComponent(term||s));
+    const j = await r.json();
+    if(j[1] && j[1][0]){
+      const r2 = await fetch("https://en.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(j[1][0]));
+      const p = await r2.json();
+      if(p.extract) return reply(p.extract.split(". ").slice(0,2).join(". ") + ".");
+    }
+  }catch(e){}
+  reply("Ye mere paas nahi hai. DNA, gene, chromosome, protein, ya human body ke baare mein pucho.");
+}
+
+function submit(){
+  const i = document.getElementById("q"); const q = i.value.trim(); if(!q) return;
+  i.value = ""; say("me", q); answer(q);
+}
+document.getElementById("ask").onclick = submit;
+document.getElementById("q").onkeydown = e=>{ if(e.key==="Enter") submit(); };
+
+const chips = document.getElementById("chips");
+["DNA kya hai?","Chromosome kitne hote hain?","HBB gene kya hai?","CRISPR kya hai?","Dimag ke baare mein batao","Human Genome Project"].forEach(t=>{
+  const s = document.createElement("span"); s.textContent = t;
+  s.onclick = ()=>{ say("me",t); answer(t); }; chips.appendChild(s);
+});
+document.getElementById("voiceBtn").onclick = e=>{
+  voiceOn = !voiceOn; e.target.textContent = "🔊 Voice: " + (voiceOn?"ON":"OFF");
+  if(!voiceOn) speechSynthesis.cancel();
+};
+
+/* ================== MIC ================== */
+let micStream = null, audioCtx, analyser, rec, micOn = false;
+const micBtn = document.getElementById("micBtn"), level = document.getElementById("level");
+micBtn.onclick = async ()=>{
+  if(micOn){ stopMic(); return; }
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({audio:true});
+  }catch(e){ return reply("Mic ki permission nahi mili."); }
+  micOn = true; micBtn.classList.add("on"); micBtn.textContent = "⏹ Stop Mic";
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser(); analyser.fftSize = 256;
+  audioCtx.createMediaStreamSource(micStream).connect(analyser);
+  const buf = new Uint8Array(analyser.frequencyBinCount);
+  (function meter(){
+    if(!micOn) { level.style.width = 0; return; }
+    analyser.getByteFrequencyData(buf);
+    const avg = buf.reduce((a,b)=>a+b,0)/buf.length;
+    level.style.width = Math.min(100, avg*1.6) + "%";
+    requestAnimationFrame(meter);
+  })();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(SR){
+    rec = new SR(); rec.lang = "en-IN"; rec.continuous = true; rec.interimResults = false;
+    rec.onresult = ev=>{
+      const txt = ev.results[ev.results.length-1][0].transcript.trim();
+      if(txt){ say("me", txt); answer(txt); }
+    };
+    rec.onend = ()=>{ if(micOn) try{ rec.start(); }catch(e){} };
+    rec.start();
+  } else reply("Is browser mein voice recognition nahi hai. Chrome use karo, ya type karke pucho.");
+};
+function stopMic(){
+  micOn = false; micBtn.classList.remove("on"); micBtn.textContent = "🎤 Mic";
+  if(rec) try{ rec.stop(); }catch(e){}
+  if(micStream) micStream.getTracks().forEach(t=>t.stop());
+  if(audioCtx) audioCtx.close();
+}
+
+/* ================== CAMERA ================== */
+const camBtn = document.getElementById("camBtn"), cam = document.getElementById("cam");
+let camStream = null;
+camBtn.onclick = async ()=>{
+  if(camStream){
+    camStream.getTracks().forEach(t=>t.stop()); camStream = null;
+    cam.style.display = "none"; camBtn.classList.remove("on"); camBtn.textContent = "📷 Camera"; return;
+  }
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}});
+    cam.srcObject = camStream; cam.style.display = "block";
+    camBtn.classList.add("on"); camBtn.textContent = "⏹ Stop Camera";
+  }catch(e){ reply("Camera ki permission nahi mili."); }
+};
+
+say("bot", "Namaste! Main tumhara Human guide hoon. Left side mein real HBB gene ka DNA ghoom raha hai. Mujhse DNA ya human body ke baare mein kuch bhi pucho, type karke ya mic se.");
+</script>
+</body>
+</html>
